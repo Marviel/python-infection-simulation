@@ -9,7 +9,8 @@
 # Details for running are found by running: ./lbechtel-lab10.py
 
 from random import random as rand
-import random
+from random import randrange
+#import random
 import time
 import numpy as np
 import matplotlib as ml
@@ -118,8 +119,8 @@ class Simulation(object):
 
   # Infects a random patient in the grid.
   def infect_random(self):
-    randr = random.randrange(self.nrows)
-    randc = random.randrange(self.ncols)
+    randr = randrange(self.nrows)
+    randc = randrange(self.ncols)
     self.infect_patient(randr, randc)
 
   # Infects a patient, and increases the self.infected_cnt to reflect the increase.
