@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+#Title: lbechtel-hw9.py
+#Author:        Luke Bechtel
+#Class:         CS370
+#Professor:     Dr. Berry
+#Description:   
+# A monte carlo simulation of an infection throughout a hospital.
+# WILL PRODUCE VIDEO IF THREADNUM ARGUMENT IS SET TO 1
+# Details for running are found by running: ./lbechtel-lab10.py
 
 from random import random as rand
 import random
@@ -9,19 +17,21 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from pylab import *
 from threading import Thread
+import sys
 
+if len(sys.argv) != 7:
+  print("USAGE: ./lbechtel-lab10 [NROWS: int, number of rows.] [NCOLS: int, number of cols.] [MAX_DAYS: int, days that the virus will die out in] [TAU: infection rate] [NU: vaccination rate] [THREADNUM: Number of threads. 1 for video.]")
+  sys.exit(0)
 
-NROWS = 10
-NCOLS = 10
-TIMESTEP = 0 #in seconds
-MAX_DAYS = 20
-TAU = .4
-NU = .01
-THREADNUM = 10
+TIMESTEP = .1 #in seconds
+NROWS = int(sys.argv[1])
+NCOLS = int(sys.argv[2])
+MAX_DAYS = int(sys.argv[3])
+TAU = float(sys.argv[4])
+NU = float(sys.argv[5])
+THREADNUM = int(sys.argv[6])
 
-
-
-
+#Contains data related to the monte carlo simulation.
 class Simulation(object):
   def __init__(self, nrows, ncols, tau, nu, max_days):
     self.nrows = nrows #cols
@@ -70,7 +80,7 @@ class Simulation(object):
     self.days += 1
     return ninfected
 
-
+  #Check if a cell should be infected.
   def roll_infect(self, r, c):
     t=False
 
@@ -79,10 +89,6 @@ class Simulation(object):
 
     # Check all neighbors
     for dr, dc in ds:
-      # print "r: %d, dr: %d"%(r, dr)
-      # print "c: %d, dc: %d"%(c, dc)
-      # print r + dr
-      # print c + dc
       if self.check_valid_offset(r, c, dr, dc): # Is there a neighbor at this position in the grid?
         if (self.grid[r + dr][c + dc] > 0): # if this neighbor is infected
           if not t:
@@ -94,6 +100,7 @@ class Simulation(object):
     # in first day of infection").
     return t
 
+  #Check if a cell should be vaccinated.
   def roll_vaccinate(self, r, c):
     return rand() < self.nu
 
@@ -129,6 +136,7 @@ class Simulation(object):
   #  This should only happen after the disease runs its course.
   def recover_patient(self, r, c):
     self.grid[r][c] = -1
+    self.infected_cnt -= 1
     self.recovered_cnt += 1
 
   # Prints the current contents of self.grid.
@@ -179,12 +187,14 @@ def run_sim_video(sim):
     print("x = %d ------------------------------------"%(x))
     sim.print_grid()
 
+    #Colors for video.
     H = np.array(sim.grid)[::]
     D = np.zeros((NROWS,NCOLS,3))
     for r in range(len(H)):
       for c in range(len(H[r])):
         D[r][c] = sim.get_rgb_color(H[r][c])
 
+    #Place data for video.
     ax.set_title( str( x ) )
     im.set_data( D )
     im.axes.figure.canvas.draw()
@@ -207,7 +217,6 @@ def run_sim(sim):
         D[r][c] = sim.get_rgb_color(H[r][c])
 
     x += 1
-    time.sleep(TIMESTEP)
 
 
 
@@ -222,11 +231,10 @@ class ThreadTest(Thread):
     run_sim(self.sim)
 
 
-
 import sys
 
 
-
+# If we're looking at multiple threads, we don't show the video.
 if THREADNUM > 1:
   vaccinated_cnt = 0
   infected_cnt = 0
@@ -253,8 +261,10 @@ if THREADNUM > 1:
   for t in thread_list:
     if max_day_count < t.sim.days: max_day_count = t.sim.days
 
-  #Summing all elements of arrays.
+  #list of total number of each type seen on a given day.
   vacc_sum_list = [0 for x in range(max_day_count)]
+  rec_sum_list = [0 for x in range(max_day_count)]
+  inf_sum_list = [0 for x in range(max_day_count)]
   for t in thread_list:
     print("====THREAD:  %d================================================================="%(i))
     print("  infected: %s"%(str(t.sim.infected_list)))
@@ -265,121 +275,53 @@ if THREADNUM > 1:
     infected_cnt += t.sim.infected_cnt
     recovered_cnt += t.sim.recovered_cnt
 
-    # The elements of the array with the difference between the vacc_sum_list and vacc_list padded by the last element of vacc_list
+    # Add each day's totals to the summed totals of all threads.
     diff = len(vacc_sum_list) - len(t.sim.vaccinated_list)
-    padded_vac = t.sim.vaccinated_list + [t.sim.vaccinated_list[-1] for x in range(diff)]
-    print("erm----------")
-    print(t.sim.vaccinated_list)
-    print(padded_vac)
-    print(len(padded_vac))
-    print(len(vacc_sum_list))
+    padded = t.sim.vaccinated_list + [t.sim.vaccinated_list[-1] for x in range(diff)]
+    vacc_sum_list = [sum(x) for x in zip(padded, vacc_sum_list)]
+    
+    # Add each day's totals to the summed totals of all threads.
+    diff = len(inf_sum_list) - len(t.sim.infected_list)
+    padded = t.sim.infected_list + [t.sim.infected_list[-1] for x in range(diff)]
+    inf_sum_list = [sum(x) for x in zip(padded, inf_sum_list)]
 
-    vacc_sum_list = [sum(x) for x in zip(padded_vac, vacc_sum_list)]
-    print(vacc_sum_list)
+    # Add each day's totals to the summed totals of all threads.
+    diff = len(rec_sum_list) - len(t.sim.recovered_list)
+    padded = t.sim.recovered_list + [t.sim.recovered_list[-1] for x in range(diff)]
+    rec_sum_list = [sum(x) for x in zip(padded, rec_sum_list)]
 
     i += 1
 
+  #Calculate average of each important variable per day throughout all simulations.
+  avg_vacc_list = np.divide(np.array(vacc_sum_list), THREADNUM)
+  avg_rec_list = np.divide(np.array(rec_sum_list), THREADNUM)
+  avg_inf_list = np.divide(np.array(inf_sum_list), THREADNUM)
 
-  avg_vacc = 1.0*vaccinated_cnt/(1.0*THREADNUM)
-  avg_inf = 1.0*infected_cnt/(1.0*THREADNUM)
-  avg_rec = 1.0*recovered_cnt/(1.0*THREADNUM)
+  #Prepare plot.
+  plt.plot(avg_vacc_list, label="vaccinated")
+  plt.plot(avg_rec_list, label="recovered")
+  plt.plot(avg_inf_list, label="infected")
+  plt.title("Infected Population Simulation (sim = %d)\nRates: infection=%f, vaccination=%f, recovery: after %d days."%(THREADNUM,TAU,NU,MAX_DAYS))
+  plt.xlabel("# days")
+  plt.ylabel("# population")
+  plt.legend(loc='upper left')
+  plt.show()
+
+  #Printing statistics about all threads run.
   print("========================================================")
   print("====================STATISTICS==========================")
   print("========================================================")
-  print("  vacc_sum: %s"%(str(vacc_sum_list)))
   print("  vacc_cnt: %d"%(vaccinated_cnt))
   print("  inf_cnt: %d"%(infected_cnt))
   print("  rec_cnt: %d"%(recovered_cnt))
-  print("  avg_vacc: %f"%(avg_vacc))
-  print("  avg_inf: %f"%(avg_inf))
-  print("  avg_rec: %f"%(avg_rec))
-else:
+  print("  vacc_sum_list: %s"%(str(vacc_sum_list)))
+  print("  rec_sum_list: %s"%(str(rec_sum_list)))
+  print("  inf_sum_list: %s"%(str(inf_sum_list)))
+  print("  avg_vacc_list: %s"%(str(avg_vacc_list)))
+  print("  avg_rec_list: %s"%(str(avg_rec_list)))
+  print("  avg_inf_list: %s"%(str(avg_inf_list)))
+else: #If we're just looking at one thread, we show the video.
   sim = Simulation(NROWS, NCOLS, TAU, NU, MAX_DAYS)
   run_sim_video(sim)
   # The total number of recovered patients at the end of the simulation instance. 
   sim.print_info()
-
-
-
-
-
-# The goal of this assignment is to create a Monte Carlo simulator of the spread of an infectious disease in a hospital ward. 
-#For simplicity, assume that the ward always contains 100 patients, arranged in a 10x10 (n=10) grid with equal distances between neighboring patients. 
-#Assume that the infectious disease in this model always lasts exactly k days 
-#  (meaning, every patient who gets it will recover after k days and will never be susceptible to that particular infection again). 
-#In this model, a patient may only be infected by a neighboring patient. Throughout the simulation, a patient may be in one of four states: 
-#     susceptible to infection, infected (in the ith day of infection; 1 <= i <= k), recovered, or vaccinated. Let these states be represented by 0,i,-1,-2, 
-#     respectively. The Monte Carlo simulator will require the following parameters to determine state transitions for each grid location (patient):
-
-# tau: Infection spread rate. The probability that a susceptible patient will become infected 
-#   (Only relevant if at least one of the neighbors is infected). Possible values between 0 and 1.
-# nu: Vaccination rate. Only susceptible patients can be vaccinated. Possible values between 0 and 1.
-# Simulation Initialization
-
-# At the start of the simulation, initialize the 10x10 matrix to all zeros. Randomly select one location and set it to 1 (assume there is only one infected patient at the start of the simulation). Use numpy.random.rand() whenever you need to generate one random number between 0 and 1. This function will be highly useful throughout the simulation.
-
-# Simulation Model
-
-# On every iteration and for every patient, first check the patient's status (matrix value). 
-#If the patient is either vaccinated or recovered, nothing further needs to be done. 
-#If the patient is susceptible, call the infect() subroutine (see below) to determine if the patient becomes infected on this iteration of the simulation. 
-#If the patient has not become infected, the code should give him a chance to become vaccinated (using vaccination rate nu). 
-#If the patient is infected (matrix value is a positive integer), increment the integer once and check if it has exceeded k 
-#    If it has, set the value to -1 (recovered).
-
-
-# Simulation Termination
-# The simulation should terminate once all patients have recovered. 
-# In terms of the values of the matrix, this means that the simulation should terminate when the matrix no longer contains any positive, 
-#   non-zero values. Note that because of randomness, some of the simulation instances may be very brief.
-
-# Infection Spread Algorithm
-
-# In this simulation, three conditions must be met in order for a patient to become infected:
-
-# Patient is currently susceptible (matrix cell value is zero)
-# Patient has at least one infected neighbor. Having more than one infected neighbor should increase the probability of infection spread 
-#    (for every patient, your python script should generate a random number and check against tau once for every one of that patient's infected neighbors).
-# A random number generated by numpy.random.rand() is less than the infection spread rate tau.
-# The following is partial code from an infection spread simulation subroutine. 
-# It demonstrates how your simulation might check if patient (i,j) becomes infected: (numpy.random.rand() renamed rand() in this script)
- 
-
-
-
-                                                             
-# The infect subroutine would then be called from the main simulation loop for every susceptible patient.
-# Vaccination Algorithm
-
-# In code, the vaccination algorithm will most likely look very similar to the infection spread algorithm. 
-# The main difference is that in our simulation, vaccination is completely random. 
-# The infection status of a patient's neighbors does not matter. 
-# Every susceptible patient has an equal chance to be vaccinated on every iteration of the simulation. 
-# Simply generate a random number and check against the vaccination probability nu.
-
-# Results Summary
-
-
-
-
-
-
-
-# Among the results produced by every simulation instance there should be:
-
-# A vector containing the numbers of infected patients for every day of the simulation. For example, this may look like:
-# infected: [2, 3, 4, 6, 9, 13, 14, 16, 14, 15, 13, 14, 12, 7, 5, 2, 1, 0]
-# A vector containing the numbers of vaccinated patients for every day of the simulation. For example, this may look like:
-# vaccinated: [10, 18, 24, 28, 31, 34, 34, 38, 41, 43, 45, 47, 49, 51, 51, 53, 54, 56]
-# A vector containing the numbers of recovered patients for every day of the simulation. This might be:
-# recovered: [0, 0, 0, 0, 2, 9, 10, 14, 20, 31, 39, 52, 64, 70, 77, 84, 84, 87]
-# Using the three vectors above, we can determine that (for example), on day 5 of the simulation, 9 patients are infected, 31 have been vaccinated, and 2 have recovered. 
-# Note that Susceptible Population = TotalPopulation - (recovered + infected + vaccinated). 
-# In averaging vector elements (across all simulation threads), normalize by the number of threads and pad each vector using the last element of the array rather than zero. 
-# Please write the three output vectors generated by each thread to an output file or
-# to the console (stdout). The final set of vectors (averaged) should be written to file or stdout as well.
-
-# Your simulation should use pylab plotting to summarize the results for k=20. Below are two example images:
-
-
-
